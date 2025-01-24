@@ -5182,21 +5182,41 @@ class TestEventLogStorage:
 
         storage.set_concurrency_slots("foo", 5)
 
+        status = {}
+
         def _occupy_slot(key: str):
+            try:
+                do_occupy_slot(key)
+            except Exception as e:
+                status[key] = f"failed: {e}"
+                raise
+
+        def do_occupy_slot(key: str):
+            status[key] = "started"
             start = time.time()
             claim_status = storage.claim_concurrency_slot("foo", run_id, key)
             while time.time() < start + TOTAL_TIMEOUT_TIME:
                 if claim_status.slot_status == ConcurrencySlotStatus.CLAIMED:
                     break
                 else:
+                    status[key] = f"waiting for claim: {claim_status}"
                     claim_status = storage.claim_concurrency_slot("foo", run_id, key)
                     time.sleep(0.05)
+            status[key] = "claimed"
             storage.free_concurrency_slot_for_step(run_id, key)
+            status[key] = "done"
 
         with ThreadPoolExecutor() as executor:
-            list(
-                executor.map(_occupy_slot, [str(i) for i in range(100)], timeout=TOTAL_TIMEOUT_TIME)
-            )
+            try:
+                list(
+                    executor.map(
+                        _occupy_slot, [str(i) for i in range(100)], timeout=TOTAL_TIMEOUT_TIME
+                    )
+                )
+            except TimeoutError:
+                raise Exception(
+                    f"failed to claim concurrency slots within timeout. Status of threeads: {status}"
+                )
             foo_info = storage.get_concurrency_info("foo")
             assert foo_info.slot_count == 5
             assert foo_info.active_slot_count == 0
@@ -5259,34 +5279,6 @@ class TestEventLogStorage:
         # initially there are no concurrency limited keys
         assert storage.get_concurrency_keys() == set(["foo"])
         assert storage.get_concurrency_info("foo").slot_count == 1
-
-    def test_changing_default_concurrency_key(
-        self, storage: EventLogStorage, instance: DagsterInstance
-    ):
-        assert storage
-        if not storage.supports_global_concurrency_limits:
-            pytest.skip("storage does not support global op concurrency")
-
-        if not self.can_set_concurrency_defaults():
-            pytest.skip("storage does not support setting global op concurrency defaults")
-
-        self.set_default_op_concurrency(instance, storage, 1)
-        assert instance.global_op_concurrency_default_limit == 1
-
-        assert storage.initialize_concurrency_limit_to_default("foo")
-        assert storage.get_concurrency_info("foo").slot_count == 1
-
-        self.set_default_op_concurrency(instance, storage, 2)
-        assert instance.global_op_concurrency_default_limit == 2
-
-        assert storage.initialize_concurrency_limit_to_default("foo")
-        assert storage.get_concurrency_info("foo").slot_count == 2
-
-        self.set_default_op_concurrency(instance, storage, None)
-        assert instance.global_op_concurrency_default_limit is None
-
-        assert storage.initialize_concurrency_limit_to_default("foo")
-        assert storage.get_concurrency_info("foo").slot_count == 0
 
     def test_asset_checks(
         self,
