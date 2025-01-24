@@ -90,7 +90,11 @@ def generate_code_location_components_schema(ctx: click.Context) -> None:
     file for all component types available in the current code location.
     """
     if not is_inside_code_location_project(Path.cwd()):
-        click.echo("This command must be run inside a Dagster code location project.", fg="red")
+        click.echo(
+            click.style(
+                "This command must be run inside a Dagster code location project.", fg="red"
+            )
+        )
         sys.exit(1)
 
     builtin_component_lib = ctx.obj.get(CLI_BUILTIN_COMPONENT_LIB_KEY, False)
