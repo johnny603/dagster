@@ -1,4 +1,5 @@
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal, Union
@@ -88,7 +89,9 @@ def generate_code_location_components_schema(ctx: click.Context) -> None:
     """Builds a JSON schema which ORs the schema for a component
     file for all component types available in the current code location.
     """
-    assert is_inside_code_location_project(Path.cwd())
+    if not is_inside_code_location_project(Path.cwd()):
+        click.echo("This command must be run inside a Dagster code location project.", fg="red")
+        sys.exit(1)
 
     builtin_component_lib = ctx.obj.get(CLI_BUILTIN_COMPONENT_LIB_KEY, False)
 
