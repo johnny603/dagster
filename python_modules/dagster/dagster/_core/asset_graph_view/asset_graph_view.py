@@ -198,12 +198,12 @@ class AssetGraphView(LoadingContext):
             self.asset_graph.has(key), f"Asset graph does not contain {key.to_user_string()}"
         )
 
-        serializable_subset = asset_graph_subset.get_asset_subset(key, self.asset_graph)
-        check.invariant(
-            serializable_subset.is_compatible_with_partitions_def(
-                self._get_partitions_def(key),
-            ),
-            f"Partitions definition for {key.to_user_string()} is not compatible with the passed in AssetGraphSubset",
+        serializable_subset = asset_graph_subset.get_asset_subset(
+            key, self.asset_graph
+        ).with_asset_graph_partitions_def(
+            self._get_partitions_def(key),
+            self._temporal_context.effective_dt,
+            self._instance,
         )
 
         return EntitySubset(
