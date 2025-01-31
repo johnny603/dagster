@@ -35,6 +35,11 @@ def test_empty_project(monkeypatch):
         ["-f", "valid_project/definitions.py"],
         ["-m", "valid_project.definitions"],
         ["-w", "workspace.yaml"],
+        ["--load-in-process"],
+        ["-f", "valid_project/definitions.py", "--load-in-process"],
+        ["-f", "valid_project/definitions.py", "--load-in-process"],
+        ["-m", "valid_project.definitions", "--load-in-process"],
+        ["-w", "workspace.yaml", "--load-in-process"],
     ],
 )
 def test_valid_project(options, monkeypatch):
@@ -45,10 +50,16 @@ def test_valid_project(options, monkeypatch):
         assert "Validation successful" in result.output
 
 
-def test_valid_project_with_multiple_definitions_files(monkeypatch):
+@pytest.mark.parametrize("in_process", [True, False])
+def test_valid_project_with_multiple_definitions_files(in_process: bool, monkeypatch):
     with monkeypatch.context() as m:
         m.chdir(VALID_PROJECT_PATH)
-        options = ["-f", "valid_project/definitions.py", "-f", "valid_project/more_definitions.py"]
+        options = [
+            "-f",
+            "valid_project/definitions.py",
+            "-f",
+            "valid_project/more_definitions.py",
+        ] + (["--load-in-process"] if in_process else [])
         result = invoke_validate(options=options)
         assert result.exit_code == 0
         assert "Validation successful for code location definitions.py." in result.output
@@ -62,6 +73,10 @@ def test_valid_project_with_multiple_definitions_files(monkeypatch):
         ["-f", "invalid_project/definitions.py"],
         ["-m", "invalid_project.definitions"],
         ["-w", "workspace.yaml"],
+        ["--load-in-process"],
+        ["-f", "invalid_project/definitions.py", "--load-in-process"],
+        ["-m", "invalid_project.definitions", "--load-in-process"],
+        ["-w", "workspace.yaml", "--load-in-process"],
     ],
 )
 def test_invalid_project(options, monkeypatch):
@@ -73,10 +88,14 @@ def test_invalid_project(options, monkeypatch):
         assert "Duplicate asset key: AssetKey(['my_asset'])" in result.output
 
 
-def test_env_var(monkeypatch):
+@pytest.mark.parametrize("in_process", [True, False])
+def test_env_var(in_process: bool, monkeypatch):
     with monkeypatch.context() as m:
         m.chdir(VALID_PROJECT_PATH)
         # Definitions in `gated_definitions.py` are gated by the "DAGSTER_IS_DEFS_VALIDATION_CLI" environment variable
-        result = invoke_validate(options=["-f", "valid_project/gated_definitions.py"])
+        result = invoke_validate(
+            options=["-f", "valid_project/gated_definitions.py"]
+            + (["--load-in-process"] if in_process else [])
+        )
         assert result.exit_code == 0
         assert "Validation successful for code location gated_definitions.py." in result.output

@@ -298,16 +298,17 @@ def get_in_process_workspace_from_kwargs(
     tgt = get_workspace_load_target(kwargs)
     origins = tgt.create_origins()
 
-    check.invariant(origins and len(origins) == 1, "Expected exactly one code location")
-    loadable_target_origin = tgt.create_origins()[0].loadable_target_origin
-
     with WorkspaceProcessContext(
         instance,
         InProcessWorkspaceLoadTarget(
-            InProcessCodeLocationOrigin(
-                loadable_target_origin,
-                container_image=container_image,
-            ),
+            [
+                InProcessCodeLocationOrigin(
+                    origin.loadable_target_origin,
+                    container_image=container_image,
+                    location_name=origin.location_name,
+                )
+                for origin in origins
+            ]
         ),
     ) as workspace_process_context:
         yield workspace_process_context.create_request_context()
