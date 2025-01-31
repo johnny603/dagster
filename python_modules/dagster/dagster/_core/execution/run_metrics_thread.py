@@ -257,11 +257,9 @@ def start_run_metrics_thread(
     if not container_metrics_enabled and not python_metrics_enabled:
         if logger:
             logger.info(
-                (
-                    "No collectable metrics, skipping run metrics thread. "
-                    "This feature is not supported by some agents and requires execution in compatible linux "
-                    "containers based on cgroup v1 or v2."
-                )
+                "No collectable metrics, skipping run metrics thread. "
+                "This feature is not supported by some agents and requires execution in compatible linux "
+                "containers based on cgroup v1 or v2."
             )
         return None, None
 
