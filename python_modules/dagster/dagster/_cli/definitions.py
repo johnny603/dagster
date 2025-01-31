@@ -9,7 +9,7 @@ from dagster._cli.job import apply_click_params
 from dagster._cli.utils import get_possibly_temporary_instance_for_cli
 from dagster._cli.workspace.cli_target import (
     ClickArgValue,
-    get_in_process_workspace_from_kwargs,
+    get_auto_determined_workspace_from_kwargs,
     get_workspace_from_kwargs,
     python_file_option,
     python_module_option,
@@ -50,16 +50,9 @@ def validate_command_options(f):
 )
 @click.option(
     "--load-with-grpc",
-    "use_grpc",
     flag_value=True,
-    default=True,
-    help="Load the code locations using a gRPC server, instead of in-process. [default]",
-)
-@click.option(
-    "--load-in-process",
-    "use_grpc",
-    flag_value=False,
-    help="Load the code locations in-process, instead of using a gRPC server.",
+    default=False,
+    help="Load the code locations using a gRPC server, instead of in-process.",
 )
 @definitions_cli.command(
     name="validate",
@@ -78,21 +71,23 @@ def validate_command_options(f):
     """,
 )
 def definitions_validate_command(
-    log_level: str, log_format: str, use_grpc: bool, **kwargs: ClickArgValue
+    log_level: str, log_format: str, load_with_grpc: bool, **kwargs: ClickArgValue
 ):
     os.environ["DAGSTER_IS_DEFS_VALIDATION_CLI"] = "1"
 
     configure_loggers(formatter=log_format, log_level=log_level.upper())
-    logger = logging.getLogger("dagster")
 
+    logger = logging.getLogger("dagster")
     logger.info("Starting validation...")
     with get_possibly_temporary_instance_for_cli(
         "dagster definitions validate", logger=logger
     ) as instance:
         with (
             get_workspace_from_kwargs(instance=instance, version=dagster_version, kwargs=kwargs)
-            if use_grpc
-            else get_in_process_workspace_from_kwargs(instance=instance, kwargs=kwargs)
+            if load_with_grpc
+            else get_auto_determined_workspace_from_kwargs(
+                instance=instance, version=dagster_version, kwargs=kwargs
+            )
         ) as workspace:
             invalid = any(
                 entry

@@ -9,11 +9,14 @@ from dagster._utils import file_relative_path
 EMPTY_PROJECT_PATH = file_relative_path(__file__, "definitions_command_projects/empty_project")
 VALID_PROJECT_PATH = file_relative_path(__file__, "definitions_command_projects/valid_project")
 INVALID_PROJECT_PATH = file_relative_path(__file__, "definitions_command_projects/invalid_project")
+PROJECT_ALTERNATE_ENTRYPOINT_PATH = file_relative_path(
+    __file__, "definitions_command_projects/alternate_entrypoint_project"
+)
 
 
-def invoke_validate(options: Optional[Sequence[str]] = None):
+def invoke_validate(options: Optional[Sequence[str]] = None, log_level: str = "DEBUG"):
     runner = CliRunner()
-    return runner.invoke(definitions_validate_command, options)
+    return runner.invoke(definitions_validate_command, (options or []) + ["--log-level", log_level])
 
 
 def test_empty_project(monkeypatch):
@@ -35,11 +38,7 @@ def test_empty_project(monkeypatch):
         ["-f", "valid_project/definitions.py"],
         ["-m", "valid_project.definitions"],
         ["-w", "workspace.yaml"],
-        ["--load-in-process"],
-        ["-f", "valid_project/definitions.py", "--load-in-process"],
-        ["-f", "valid_project/definitions.py", "--load-in-process"],
-        ["-m", "valid_project.definitions", "--load-in-process"],
-        ["-w", "workspace.yaml", "--load-in-process"],
+        ["--load-with-grpc"],
     ],
 )
 def test_valid_project(options, monkeypatch):
@@ -49,9 +48,24 @@ def test_valid_project(options, monkeypatch):
         assert result.exit_code == 0
         assert "Validation successful" in result.output
 
+        if "--load-with-grpc" in options:
+            assert "Loading workspace with gRPC server" in result.output
+        else:
+            assert "Loading workspace in-process" in result.output
 
-@pytest.mark.parametrize("in_process", [True, False])
-def test_valid_project_with_multiple_definitions_files(in_process: bool, monkeypatch):
+
+def test_alternate_entrypoint(monkeypatch):
+    with monkeypatch.context() as m:
+        m.chdir(PROJECT_ALTERNATE_ENTRYPOINT_PATH)
+        result = invoke_validate(
+            options=["-w", "workspace.yaml"],
+        )
+
+        # Since we're using an alternate entrypoint, we always load with gRPC
+        assert "Loading workspace with gRPC server" in result.output
+
+
+def test_valid_project_with_multiple_definitions_files(monkeypatch):
     with monkeypatch.context() as m:
         m.chdir(VALID_PROJECT_PATH)
         options = [
@@ -59,11 +73,15 @@ def test_valid_project_with_multiple_definitions_files(in_process: bool, monkeyp
             "valid_project/definitions.py",
             "-f",
             "valid_project/more_definitions.py",
-        ] + (["--load-in-process"] if in_process else [])
+        ]
         result = invoke_validate(options=options)
         assert result.exit_code == 0
         assert "Validation successful for code location definitions.py." in result.output
         assert "Validation successful for code location more_definitions.py." in result.output
+
+        # We always load with gRPC when multiple files are provided
+        assert "Loading workspace in-process" not in result.output
+        assert "Loading workspace with gRPC server" in result.output
 
 
 @pytest.mark.parametrize(
@@ -73,10 +91,6 @@ def test_valid_project_with_multiple_definitions_files(in_process: bool, monkeyp
         ["-f", "invalid_project/definitions.py"],
         ["-m", "invalid_project.definitions"],
         ["-w", "workspace.yaml"],
-        ["--load-in-process"],
-        ["-f", "invalid_project/definitions.py", "--load-in-process"],
-        ["-m", "invalid_project.definitions", "--load-in-process"],
-        ["-w", "workspace.yaml", "--load-in-process"],
     ],
 )
 def test_invalid_project(options, monkeypatch):
@@ -88,14 +102,10 @@ def test_invalid_project(options, monkeypatch):
         assert "Duplicate asset key: AssetKey(['my_asset'])" in result.output
 
 
-@pytest.mark.parametrize("in_process", [True, False])
-def test_env_var(in_process: bool, monkeypatch):
+def test_env_var(monkeypatch):
     with monkeypatch.context() as m:
         m.chdir(VALID_PROJECT_PATH)
         # Definitions in `gated_definitions.py` are gated by the "DAGSTER_IS_DEFS_VALIDATION_CLI" environment variable
-        result = invoke_validate(
-            options=["-f", "valid_project/gated_definitions.py"]
-            + (["--load-in-process"] if in_process else [])
-        )
+        result = invoke_validate(options=["-f", "valid_project/gated_definitions.py"])
         assert result.exit_code == 0
         assert "Validation successful for code location gated_definitions.py." in result.output
