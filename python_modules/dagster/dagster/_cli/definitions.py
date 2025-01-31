@@ -9,6 +9,7 @@ from dagster._cli.job import apply_click_params
 from dagster._cli.utils import get_possibly_temporary_instance_for_cli
 from dagster._cli.workspace.cli_target import (
     ClickArgValue,
+    get_in_process_workspace_from_kwargs,
     get_workspace_from_kwargs,
     python_file_option,
     python_module_option,
@@ -47,23 +48,38 @@ def validate_command_options(f):
     default="colored",
     help="Format of the logs for dagster services",
 )
+@click.option(
+    "--load-with-grpc",
+    "use_grpc",
+    flag_value=True,
+    default=True,
+    help="Load the code locations using a gRPC server, instead of in-process. [default]",
+)
+@click.option(
+    "--load-in-process",
+    "use_grpc",
+    flag_value=False,
+    help="Load the code locations in-process, instead of using a gRPC server.",
+)
 @definitions_cli.command(
     name="validate",
     help="""
     The `dagster definitions validate` command loads and validate your Dagster definitions using a Dagster instance.
 
-    This command indicates which code locations contain errors, and which ones can be successfully loaded. 
+    This command indicates which code locations contain errors, and which ones can be successfully loaded.
     Code locations containing errors are considered invalid, otherwise valid.
-    
-    When running, this command sets the environment variable `DAGSTER_IS_DEFS_VALIDATION_CLI=1`. 
+
+    When running, this command sets the environment variable `DAGSTER_IS_DEFS_VALIDATION_CLI=1`.
     This environment variable can be used to control the behavior of your code in validation mode.
-    
+
     This command returns an exit code 1 when errors are found, otherwise an exit code 0.
-    
+
     This command should be run in a Python environment where the `dagster` package is installed.
     """,
 )
-def definitions_validate_command(log_level: str, log_format: str, **kwargs: ClickArgValue):
+def definitions_validate_command(
+    log_level: str, log_format: str, use_grpc: bool, **kwargs: ClickArgValue
+):
     os.environ["DAGSTER_IS_DEFS_VALIDATION_CLI"] = "1"
 
     configure_loggers(formatter=log_format, log_level=log_level.upper())
@@ -73,8 +89,10 @@ def definitions_validate_command(log_level: str, log_format: str, **kwargs: Clic
     with get_possibly_temporary_instance_for_cli(
         "dagster definitions validate", logger=logger
     ) as instance:
-        with get_workspace_from_kwargs(
-            instance=instance, version=dagster_version, kwargs=kwargs
+        with (
+            get_workspace_from_kwargs(instance=instance, version=dagster_version, kwargs=kwargs)
+            if use_grpc
+            else get_in_process_workspace_from_kwargs(instance=instance, kwargs=kwargs)
         ) as workspace:
             invalid = any(
                 entry

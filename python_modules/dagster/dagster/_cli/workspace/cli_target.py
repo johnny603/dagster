@@ -21,11 +21,13 @@ from dagster._core.origin import (
 )
 from dagster._core.remote_representation.code_location import CodeLocation
 from dagster._core.remote_representation.external import RemoteRepository
+from dagster._core.remote_representation.origin import InProcessCodeLocationOrigin
 from dagster._core.workspace.context import WorkspaceRequestContext
 from dagster._core.workspace.load_target import (
     CompositeTarget,
     EmptyWorkspaceTarget,
     GrpcServerTarget,
+    InProcessWorkspaceLoadTarget,
     ModuleTarget,
     PackageTarget,
     PyProjectFileTarget,
@@ -280,6 +282,33 @@ def get_workspace_from_kwargs(
 ) -> Iterator[WorkspaceRequestContext]:
     with get_workspace_process_context_from_kwargs(
         instance, version, read_only=False, kwargs=kwargs
+    ) as workspace_process_context:
+        yield workspace_process_context.create_request_context()
+
+
+@contextmanager
+def get_in_process_workspace_from_kwargs(
+    instance: DagsterInstance,
+    kwargs: Mapping[str, Any],
+    container_image: Optional[str] = None,
+) -> Iterator[WorkspaceRequestContext]:
+    """Spins up a workspace in-process with the provided kwargs."""
+    from dagster._core.workspace.context import WorkspaceProcessContext
+
+    tgt = get_workspace_load_target(kwargs)
+    origins = tgt.create_origins()
+
+    check.invariant(origins and len(origins) == 1, "Expected exactly one code location")
+    loadable_target_origin = tgt.create_origins()[0].loadable_target_origin
+
+    with WorkspaceProcessContext(
+        instance,
+        InProcessWorkspaceLoadTarget(
+            InProcessCodeLocationOrigin(
+                loadable_target_origin,
+                container_image=container_image,
+            ),
+        ),
     ) as workspace_process_context:
         yield workspace_process_context.create_request_context()
 
