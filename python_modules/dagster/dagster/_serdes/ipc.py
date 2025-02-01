@@ -212,10 +212,10 @@ def interrupt_ipc_subprocess(proc: "Popen[Any]") -> None:
 
 
 def interrupt_ipc_subprocess_pid(pid: int) -> None:
-    """Send CTRL_BREAK on Windows, SIGINT on other platforms."""
+    """Send CTRL_C_EVENT on Windows, SIGINT on other platforms."""
     check.int_param(pid, "pid")
 
     if sys.platform == "win32":
-        os.kill(pid, signal.CTRL_BREAK_EVENT)
+        os.kill(pid, signal.CTRL_C_EVENT)
     else:
         os.kill(pid, signal.SIGINT)
