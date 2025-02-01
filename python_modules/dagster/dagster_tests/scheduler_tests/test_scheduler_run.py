@@ -1321,8 +1321,8 @@ def test_launch_failure(
                 "class": "ExplodingRunLauncher",
             },
             "run_coordinator": {
-                "module": "dagster._core.run_coordinator.immediately_launch_run_coordinator",
-                "class": "ImmediatelyLaunchRunCoordinator",
+                "module": "dagster._core.run_coordinator.synchronous_launch_run_coordinator",
+                "class": "SynchronousLaunchRunCoordinator",
             },
         },
     ) as scheduler_instance:
