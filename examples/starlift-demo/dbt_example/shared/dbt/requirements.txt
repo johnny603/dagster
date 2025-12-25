@@ -202,7 +202,7 @@ typing-extensions==4.10.0
     #   pydantic
     #   pydantic-core
     #   sqlfluff
-urllib3==1.26.18
+urllib3==2.6.0
     # via
     #   dbt-core
     #   requests
