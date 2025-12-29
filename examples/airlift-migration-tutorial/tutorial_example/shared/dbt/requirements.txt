@@ -177,7 +177,7 @@ six==1.16.0
     #   python-dateutil
 sqlfluff==2.3.5
     # via -r requirements.in
-sqlparse==0.4.4
+sqlparse==0.5.4
     # via
     #   dbt-core
     #   duckcli
