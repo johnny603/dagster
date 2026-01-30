@@ -429,7 +429,7 @@ mysql-connector-python==9.5.0
 narwhals==2.15.0
 natsort==8.4.0
 nbclient==0.10.4
-nbconvert==7.16.6
+nbconvert==7.17.0
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.6.1
@@ -506,7 +506,7 @@ prometheus-client==0.24.1
 prompt-toolkit==3.0.52
 propcache==0.4.1
 proto-plus==1.27.0
-protobuf==5.29.5
+protobuf==6.33.5
 psutil==7.2.1
 psycopg2-binary==2.9.11
 ptyprocess==0.7.0
