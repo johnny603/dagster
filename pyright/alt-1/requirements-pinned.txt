@@ -186,7 +186,7 @@ mypy-boto3-s3==1.42.21
 mypy-extensions==1.1.0
 mypy-protobuf==5.0.0
 nbclient==0.10.4
-nbconvert==7.16.6
+nbconvert==7.17.0
 nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.6.1
