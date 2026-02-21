@@ -6,3 +6,4 @@ dagster_pyspark
 dagster_spark
 moto
 pytest
+werkzeug>=3.1.6 # not directly required, pinned by Snyk to avoid a vulnerability
