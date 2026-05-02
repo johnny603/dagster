@@ -6,3 +6,5 @@ dagster_pyspark
 dagster_spark
 moto
 pytest
+urllib3>=2.6.3 # not directly required, pinned by Snyk to avoid a vulnerability
+werkzeug>=3.1.5 # not directly required, pinned by Snyk to avoid a vulnerability
