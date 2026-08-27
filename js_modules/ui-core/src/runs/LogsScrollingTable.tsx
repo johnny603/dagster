@@ -1,4 +1,11 @@
-import {Box, NonIdealState, Row, SpinnerWithText} from '@dagster-io/ui-components';
+import {
+  Box,
+  Container,
+  Inner,
+  NonIdealState,
+  Row,
+  SpinnerWithText,
+} from '@dagster-io/ui-components';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import clsx from 'clsx';
 import * as React from 'react';
@@ -8,9 +15,8 @@ import {LogFilter, LogsProviderLogs} from './LogsProvider';
 import {Structured, Unstructured} from './LogsRow';
 import {ColumnWidthsProvider, Headers} from './LogsScrollingTableHeader';
 import {IRunMetadataDict} from './RunMetadataProvider';
-import {filterLogs} from './filterLogs';
-import {Container, Inner} from '../ui/VirtualizedTable';
 import styles from './css/LogsScrollingTable.module.css';
+import {filterLogs} from './filterLogs';
 
 const BOTTOM_SCROLL_THRESHOLD_PX = 60;
 
@@ -104,7 +110,7 @@ export const LogsScrollingTable = (props: Props) => {
     }
 
     return (
-      <Inner $totalHeight={totalHeight}>
+      <Inner totalHeight={totalHeight}>
         {items.map(({index, key, size, start}) => {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
           const node = filteredNodes[index]!;
@@ -118,7 +124,7 @@ export const LogsScrollingTable = (props: Props) => {
             );
 
           return (
-            <Row $height={size} $start={start} key={key}>
+            <Row height={size} start={start} key={key}>
               <div
                 ref={virtualizer.measureElement}
                 data-index={index}

@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from enum import Enum
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from dagster import (
     AssetDep,
@@ -64,9 +64,9 @@ class LookerInstanceData:
         }
 
         return LookerInstanceData(
-            explores_by_id=explores_by_id,
-            dashboards_by_id=dashboards_by_id,
-            users_by_id=users_by_id,
+            explores_by_id=cast("dict[str, LookmlModelExplore]", explores_by_id),
+            dashboards_by_id=cast("dict[str, Dashboard]", dashboards_by_id),
+            users_by_id=cast("dict[str, User]", users_by_id),
         )
 
 
@@ -253,6 +253,7 @@ class DagsterLookerApiTranslator:
 
     @public
     def get_asset_spec(self, looker_structure: LookerApiTranslatorStructureData) -> AssetSpec:
+        """Returns the :py:class:`AssetSpec` representing a given Looker structure."""
         if looker_structure.structure_type == LookerStructureType.VIEW:
             return self.get_view_asset_spec(looker_structure)
         if looker_structure.structure_type == LookerStructureType.EXPLORE:

@@ -41,7 +41,7 @@ You can scaffold assets and sensors from the command line with the `dg scaffold`
 If the sensor finds new files, it starts a run of `my_job`. If not, it skips the run and logs `No new files found` in the Dagster UI.
 
 <CodeExample
-  path="docs_snippets/docs_snippets/guides/automation/simple-sensor-example.py"
+  path="docs_snippets/docs_snippets/guides/automate/simple-sensor-example.py"
   language="python"
   title="src/<project_name>/defs/assets.py"
 />
@@ -61,8 +61,7 @@ It's important to note that this interval represents a minimum interval between 
 ```python
 # Sensor will be evaluated at least every 30 seconds
 @dg.sensor(job=my_job, minimum_interval_seconds=30)
-def new_file_sensor():
-  ...
+def new_file_sensor(): ...
 ```
 
 In this example, if the `new_file_sensor`'s evaluation function takes less than a second to run, you can expect the sensor to run consistently around every 30 seconds. However, if the evaluation function takes longer, the interval between evaluations will be longer.
@@ -84,7 +83,7 @@ When dealing with a large number of events, you may want to implement a cursor t
 The following example demonstrates how you might use a cursor to only create `RunRequests` for files in a directory that have been updated since the last time the sensor ran.
 
 <CodeExample
-  path="docs_snippets/docs_snippets/guides/automation/sensor-cursor.py"
+  path="docs_snippets/docs_snippets/guides/automate/sensor-cursor.py"
   language="python"
   title="src/<project_name>/defs/assets.py"
 />
@@ -105,6 +104,7 @@ When working with sensors in Dagster, you might need to access tags from upstrea
 
 ```python
 from dagster import sensor, AssetKey, RunRequest
+
 
 @sensor(asset_key=AssetKey("my_asset"))
 def my_asset_sensor(context, asset_event):
