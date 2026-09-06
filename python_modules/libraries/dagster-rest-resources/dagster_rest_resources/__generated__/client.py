@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from .get_job_metrics import GetJobMetrics
     from .get_location_statuses import GetLocationStatuses
     from .get_logs_captured_events import GetLogsCapturedEvents
-    from .get_metrics_time_ranges import GetMetricsTimeRanges
     from .get_organization_settings import GetOrganizationSettings
     from .get_run import GetRun
     from .get_run_alert_notifications import GetRunAlertNotifications
@@ -186,6 +185,9 @@ class Client(BaseClient):
                   alertPolicies {
                     name
                   }
+                }
+                ... on CodeBackedAlertPolicyError {
+                  message
                 }
                 ... on UnauthorizedError {
                   message
@@ -1072,6 +1074,9 @@ class Client(BaseClient):
                 ... on AlertPolicy {
                   ...AlertPolicyFields
                 }
+                ... on CodeBackedAlertPolicyError {
+                  message
+                }
                 ... on InvalidAlertPolicyError {
                   message
                 }
@@ -1257,6 +1262,9 @@ class Client(BaseClient):
                 __typename
                 ... on DeleteAlertPolicySuccess {
                   alertPolicyName
+                }
+                ... on CodeBackedAlertPolicyError {
+                  message
                 }
                 ... on UnauthorizedError {
                   message
@@ -3250,28 +3258,6 @@ class Client(BaseClient):
         )
         data = self.get_data(response)
         return ListDeploymentMetricTypes.model_validate(data)
-
-    def get_metrics_time_ranges(self, **kwargs: Any) -> "GetMetricsTimeRanges":
-        from .get_metrics_time_ranges import GetMetricsTimeRanges
-
-        query = gql(
-            """
-            query GetMetricsTimeRanges {
-              metricsTimeRanges {
-                timeRanges
-              }
-            }
-            """
-        )
-        variables: dict[str, object] = {}
-        response = self.execute(
-            query=query,
-            operation_name="GetMetricsTimeRanges",
-            variables=variables,
-            **kwargs
-        )
-        data = self.get_data(response)
-        return GetMetricsTimeRanges.model_validate(data)
 
     def get_asset_metrics(
         self,

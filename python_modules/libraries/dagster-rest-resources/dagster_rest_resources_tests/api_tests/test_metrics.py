@@ -15,10 +15,6 @@ from dagster_rest_resources.__generated__.get_asset_metrics import (
     GetAssetMetricsReportingMetricsByAssetReportingMetricsMetricsEntityReportingAssetAssetKey,
     GetAssetMetricsReportingMetricsByAssetUnauthorizedError,
 )
-from dagster_rest_resources.__generated__.get_metrics_time_ranges import (
-    GetMetricsTimeRanges,
-    GetMetricsTimeRangesMetricsTimeRanges,
-)
 from dagster_rest_resources.__generated__.list_asset_metric_types import (
     ListAssetMetricTypes,
     ListAssetMetricTypesMetricTypesForAssetMetricTypeList,
@@ -125,7 +121,10 @@ class TestGetAssetMetrics:
         )
 
         result = DgApiMetricsApi(_client=client).get_asset_metrics(
-            metric_name="__dagster_dagster_credits", after=1.0, before=3.0
+            asset_keys=[["warehouse", "orders"]],
+            metric_name="__dagster_dagster_credits",
+            after=1.0,
+            before=3.0,
         )
 
         assert result.timestamps == [1.0, 2.0, 3.0]
@@ -151,8 +150,35 @@ class TestGetAssetMetrics:
 
         with pytest.raises(DagsterPlusUnauthorizedError, match="Error fetching asset metrics"):
             DgApiMetricsApi(_client=client).get_asset_metrics(
+                asset_keys=[["warehouse", "orders"]],
+                metric_name="m",
+                after=1.0,
+                before=2.0,
+            )
+
+    def test_requires_a_selection_or_keys(self):
+        client = Mock(spec=IGraphQLClient)
+
+        with pytest.raises(DagsterPlusGraphqlError, match="asset_selection or asset_keys"):
+            DgApiMetricsApi(_client=client).get_asset_metrics(
                 metric_name="m", after=1.0, before=2.0
             )
+
+        client.get_asset_selection_metrics.assert_not_called()
+
+    def test_requires_one_of_selection_or_keys(self):
+        client = Mock(spec=IGraphQLClient)
+
+        with pytest.raises(DagsterPlusGraphqlError, match="asset_selection and asset_keys"):
+            DgApiMetricsApi(_client=client).get_asset_metrics(
+                metric_name="m",
+                after=1.0,
+                before=2.0,
+                asset_selection="key:a or key:b",
+                asset_keys=[["warehouse", "orders"]],
+            )
+
+        client.get_asset_selection_metrics.assert_not_called()
 
 
 class TestGetAssetSelectionMetrics:
@@ -166,14 +192,16 @@ class TestGetAssetSelectionMetrics:
 
         client.get_asset_selection_metrics.assert_not_called()
 
-
-class TestGetMetricsTimeRanges:
-    def test_returns_the_supported_ranges(self):
+    def test_requires_one_of_selection_or_keys(self):
         client = Mock(spec=IGraphQLClient)
-        client.get_metrics_time_ranges.return_value = GetMetricsTimeRanges(
-            metricsTimeRanges=GetMetricsTimeRangesMetricsTimeRanges(timeRanges=[])
-        )
 
-        result = DgApiMetricsApi(_client=client).get_metrics_time_ranges()
+        with pytest.raises(DagsterPlusGraphqlError, match="asset_selection and asset_keys"):
+            DgApiMetricsApi(_client=client).get_asset_selection_metrics(
+                metric_name="m",
+                after=1.0,
+                before=2.0,
+                asset_selection="key:a or key:b",
+                asset_keys=[["warehouse", "orders"]],
+            )
 
-        assert result.items == []
+        client.get_asset_selection_metrics.assert_not_called()

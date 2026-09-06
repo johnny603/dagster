@@ -21,13 +21,13 @@ from dagster_rest_resources.__generated__.input_types import (
 )
 from dagster_rest_resources.gql_client import IGraphQLClient
 from dagster_rest_resources.schemas.exception import (
-    DagsterPlusGraphqlError,
+    DagsterPlusClientError,
+    DagsterPlusServerError,
     DagsterPlusUnauthorizedError,
 )
 from dagster_rest_resources.schemas.metrics import (
     DgApiMetricEntry,
     DgApiMetrics,
-    DgApiMetricsTimeRanges,
     DgApiMetricType,
     DgApiMetricTypeList,
     DgApiMetricValueChange,
@@ -60,9 +60,9 @@ def _build_metric_types(result: Any, operation: str) -> DgApiMetricTypeList:
         case "UnauthorizedError":
             raise DagsterPlusUnauthorizedError(f"Error {operation}: {result.message}")
         case "PythonError":
-            raise DagsterPlusGraphqlError(f"Error {operation}: {result.message}")
+            raise DagsterPlusServerError(f"Error {operation}: {result.message}")
         case unexpected:
-            raise DagsterPlusGraphqlError(f"Error {operation}: unexpected result {unexpected}")
+            raise DagsterPlusServerError(f"Error {operation}: unexpected result {unexpected}")
 
 
 def _build_metrics(result: Any, operation: str) -> DgApiMetrics:
@@ -87,11 +87,11 @@ def _build_metrics(result: Any, operation: str) -> DgApiMetrics:
         case "UnauthorizedError":
             raise DagsterPlusUnauthorizedError(f"Error {operation}: {result.message}")
         case "ReportingInputError":
-            raise DagsterPlusGraphqlError(f"Invalid metrics request: {result.message}")
+            raise DagsterPlusClientError(f"Invalid metrics request: {result.message}")
         case "PythonError":
-            raise DagsterPlusGraphqlError(f"Error {operation}: {result.message}")
+            raise DagsterPlusServerError(f"Error {operation}: {result.message}")
         case unexpected:
-            raise DagsterPlusGraphqlError(f"Error {operation}: unexpected result {unexpected}")
+            raise DagsterPlusServerError(f"Error {operation}: unexpected result {unexpected}")
 
 
 def _selector(
@@ -203,10 +203,6 @@ class DgApiMetricsApi:
         ).metric_types_for_deployment
         return _build_metric_types(result, "listing deployment metric types")
 
-    def get_metrics_time_ranges(self) -> DgApiMetricsTimeRanges:
-        result = self._client.get_metrics_time_ranges().metrics_time_ranges
-        return DgApiMetricsTimeRanges(items=list(result.time_ranges))
-
     def get_asset_metrics(
         self,
         metric_name: str,
@@ -220,6 +216,12 @@ class DgApiMetricsApi:
         sort_targets: list[ReportingSortTarget] | None = None,
         sort_directions: list[ReportingSortDirection] | None = None,
     ) -> DgApiMetrics:
+        if not asset_keys and not asset_selection:
+            raise DagsterPlusClientError("An asset_selection or asset_keys is required.")
+
+        if asset_keys and asset_selection:
+            raise DagsterPlusClientError("Cannot provide both asset_selection and asset_keys.")
+
         result = self._client.get_asset_metrics(
             metrics_filter=AssetReportingMetricsFilter(
                 assets=_asset_inputs(asset_keys),
@@ -274,7 +276,6 @@ class DgApiMetricsApi:
         granularity: ReportingMetricsGranularity = ReportingMetricsGranularity.DAILY,
         aggregation_function: ReportingAggregationFunction | None = None,
         deployment_ids: list[int] | None = None,
-        branch_deployments: bool | None = None,
         limit: int | None = None,
         sort_targets: list[ReportingSortTarget] | None = None,
         sort_directions: list[ReportingSortDirection] | None = None,
@@ -282,7 +283,7 @@ class DgApiMetricsApi:
         result = self._client.get_deployment_metrics(
             metrics_filter=DeploymentReportingMetricsFilter(
                 deploymentIds=deployment_ids,
-                branchDeployments=branch_deployments,
+                branchDeployments=False,
                 limit=limit,
             ),
             metrics_selector=_selector(
@@ -309,7 +310,10 @@ class DgApiMetricsApi:
         asset_selection: str | None = None,
     ) -> DgApiMetrics:
         if not asset_keys and not asset_selection:
-            raise DagsterPlusGraphqlError("An asset_selection or asset_keys is required.")
+            raise DagsterPlusClientError("An asset_selection or asset_keys is required.")
+
+        if asset_keys and asset_selection:
+            raise DagsterPlusClientError("Cannot provide both asset_selection and asset_keys.")
 
         result = self._client.get_asset_selection_metrics(
             metrics_filter=AssetSelectionReportingMetricsFilter(
