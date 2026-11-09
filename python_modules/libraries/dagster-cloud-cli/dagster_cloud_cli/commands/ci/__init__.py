@@ -37,7 +37,7 @@ from dagster_cloud_cli.config_utils import (
     get_org_url,
     get_user_token,
 )
-from dagster_cloud_cli.core import pex_builder
+from dagster_cloud_cli.core import git_repo_context, pex_builder
 from dagster_cloud_cli.core.artifacts import (
     download_organization_artifact,
     upload_organization_artifact,
@@ -446,7 +446,14 @@ def init_impl(
     status_url: str | None,
     snapshot_base_condition: SnapshotBaseDeploymentCondition | None,
     require_branch_deployment: bool,
+    defs_base_path: str | None = None,
 ):
+    # Best-effort: a deploy that isn't run from a checkout reports nothing, and
+    # the server falls back to whatever binding was set by hand.
+    repo_owner, repo_name = git_repo_context.discover_repo_owner_and_name(project_dir)
+    base_branch = git_repo_context.discover_base_branch(project_dir)
+    git_provider = git_repo_context.discover_git_provider(project_dir)
+
     yaml_path = pathlib.Path(project_dir) / dagster_cloud_yaml_path
     if not yaml_path.exists():
         raise ui.error(
@@ -525,6 +532,11 @@ def init_impl(
                 git_url=git_url,
                 commit_hash=commit_hash,
                 build_config=location.build,
+                git_provider=git_provider,
+                repo_owner=repo_owner,
+                repo_name=repo_name,
+                base_branch=base_branch,
+                defs_base_path=defs_base_path,
             ),
             build_output=None,
             status_url=status_url,
@@ -708,6 +720,52 @@ def build(
     )
 
 
+# So support can turn the redirect off mid-migration without pinning back a release.
+DISABLE_PEX_DOCKER_REDIRECT_ENV_VAR = "DAGSTER_CLOUD_DISABLE_PEX_DOCKER_REDIRECT"
+
+
+def _resolve_build_strategy(
+    build_strategy: BuildStrategy,
+    url: str,
+    deployment_name: str,
+) -> BuildStrategy:
+    """Redirect a PEX build to a Docker build when the target registry is Harbor.
+
+    Harbor is what routes a location to the Kubernetes serverless agent, which has no PEX
+    runtime. Keyed on the registry rather than on which agents are running, because those two
+    diverge during a rollback: the tenant and its agent are deliberately left up while the
+    registry moves back to ECR, and such a build should stay a python executable.
+    """
+    if build_strategy != BuildStrategy.pex:
+        return build_strategy
+
+    if os.getenv(DISABLE_PEX_DOCKER_REDIRECT_ENV_VAR):
+        ui.warn(
+            f"{DISABLE_PEX_DOCKER_REDIRECT_ENV_VAR} is set - skipping the registry check and"
+            " building a python executable as requested."
+        )
+        return build_strategy
+
+    try:
+        registry_info = utils.get_registry_info(url, deployment_name)
+    except Exception as e:
+        ui.warn(
+            f"Could not determine the target registry ({e}); building a python executable. If"
+            " this deployment runs Serverless on Kubernetes the result will not be runnable -"
+            " rerun the build, or pass --build-strategy=docker."
+        )
+        return build_strategy
+
+    if not registry_info.get("is_harbor"):
+        return build_strategy
+
+    ui.print(
+        "Serverless on Kubernetes does not run python executables - building a Docker image"
+        " from the same PEX artifacts instead."
+    )
+    return BuildStrategy.pex_docker
+
+
 def build_impl(
     statedir: str,
     location_name: list[str],
@@ -744,6 +802,15 @@ def build_impl(
     ui.print("Going to build the following locations:")
     for name in locations:
         ui.print(f"- {name}")
+
+    if locations:
+        # All locations in a session share a deployment, so resolve the strategy once.
+        first_location = next(iter(locations.values()))
+        build_strategy = _resolve_build_strategy(
+            build_strategy,
+            first_location.url,
+            first_location.deployment_name,
+        )
 
     for name, location_state in locations.items():
         project_dir = location_state.project_dir
@@ -808,14 +875,19 @@ def build_impl(
                     f" {location_state.build_output.pex_tag} for location {name}"
                 )
             elif build_strategy == BuildStrategy.pex_docker:
-                location_state.build_output = _build_pex_docker_bundle(
+                location_state.build_output = build_pex_docker_bundle(
                     url=url,
                     api_token=api_token,
-                    name=name,
+                    name=location_state.location_name,
                     location_build_dir=location_build_dir,
                     python_version=python_version,
                     pex_build_method=pex_build_method,
-                    location_state=location_state,
+                    location_file=location_state.location_file,
+                    deployment_name=location_state.deployment_name,
+                    commit_hash=location_state.build.commit_hash,
+                    registry_info=utils.get_registry_info(
+                        location_state.url, location_state.deployment_name
+                    ),
                 )
                 state_store.save(location_state)
         except:
@@ -937,7 +1009,7 @@ def _build_pex(
     CliEventType.BUILD,
     tags=[CliEventTags.subcommand.dagster_cloud_ci, CliEventTags.server_strategy.pex],
 )
-def _build_pex_docker_bundle(
+def build_pex_docker_bundle(
     *,
     url: str,
     api_token: str,
@@ -945,13 +1017,20 @@ def _build_pex_docker_bundle(
     location_build_dir: str,
     python_version: str,
     pex_build_method: deps.BuildMethod,
-    location_state: state.LocationState,
+    location_file: str,
+    deployment_name: str,
+    commit_hash: str | None,
+    registry_info: dict[str, Any],
 ) -> state.DockerBuildOutput:
     """Serverless v2 bridge: build the PEX artifacts, then bake them into a standard Docker image
     by unpacking them into venvs at build time. Reuses the customer's PEX dependency resolution
     (no `pip` re-resolve), and produces an ordinary image v2 launches like any other.
+
+    Takes plain arguments rather than a ``LocationState`` so the serverless deploy commands, which
+    have no state store, can share it with the ci build path. ``registry_info`` is resolved by the
+    caller: the two paths hold differently scoped urls, and resolving it here would double the
+    deployment segment for one of them.
     """
-    name = location_state.location_name
     docker_utils.verify_docker()
     parsed_python_version = pex_builder.util.parse_python_version(python_version)
     version_tag = f"{parsed_python_version.major}.{parsed_python_version.minor}"
@@ -961,7 +1040,7 @@ def _build_pex_docker_bundle(
             name,
             directory=location_build_dir,
             build_folder=location_build_dir,
-            location_file=location_state.location_file,
+            location_file=location_file,
         )
         builds = pex_builder.deploy.build_locations(
             url,
@@ -989,11 +1068,8 @@ def _build_pex_docker_bundle(
             dockerfile_template.read_text(encoding="utf-8"), encoding="utf-8"
         )
 
-        registry_info = utils.get_registry_info(url, location_state.deployment_name)
         repo_location = name if registry_info.get("is_harbor") else None
-        docker_image_tag = docker_utils.default_image_tag(
-            location_state.deployment_name, name, location_state.build.commit_hash
-        )
+        docker_image_tag = docker_utils.default_image_tag(deployment_name, name, commit_hash)
 
         ui.print(f"Baking PEX bundle into a docker image for location {name}")
         if (
@@ -1169,6 +1245,11 @@ def _deploy(
             "location_file": location_state.location_file,
             "git_url": location_state.build.git_url,
             "commit_hash": location_state.build.commit_hash,
+            "git_provider": location_state.build.git_provider,
+            "repo_owner": location_state.build.repo_owner,
+            "repo_name": location_state.build.repo_name,
+            "base_branch": location_state.build.base_branch,
+            "defs_base_path": location_state.build.defs_base_path,
             **(
                 {"defs_state_info": location_state.defs_state_info.model_dump()}
                 if location_state.defs_state_info
@@ -1294,7 +1375,7 @@ def manage_state_command(
     deployment_name = location.deployment_name
     is_branch = location.is_branch_deployment
     if file:
-        contents = load_python_file(file, None)
+        contents = load_python_file(file, None, add_uuid_suffix=True)
         projects = find_objects_in_module_of_types(contents, DbtProject)
     elif components:
         from dagster_dbt.components.dbt_project.component import get_projects_from_dbt_component

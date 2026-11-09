@@ -26,6 +26,7 @@ from dagster_pipes import PipesExtras
 from dagster_shared.record import record
 from prefect.client.schemas.objects import State
 
+from dagster_prefect.message_readers import PREFECT_RUN_ID_EXTRA, PREFECT_RUN_KIND_EXTRA
 from dagster_prefect.resource import PrefectResource, is_final_state, is_successful_state
 
 PrefectRunKind = Literal["flow-run", "task-run"]
@@ -102,6 +103,15 @@ class BasePipesPrefectClient(PipesClient, TreatAsResourceParam):
             extras=extras,
         ) as session:
             prefect_run = self._launch(context=context, session=session, **kwargs)
+            # Tells a reader of the run's logs which run to read.
+            session.report_launched(
+                {
+                    "extras": {
+                        PREFECT_RUN_KIND_EXTRA: prefect_run.kind,
+                        PREFECT_RUN_ID_EXTRA: str(prefect_run.id),
+                    }
+                }
+            )
             # Logged at launch rather than on completion so a long-running Prefect run can be
             # opened from the Dagster run's logs while it is still going.
             context.log.info(
@@ -145,7 +155,8 @@ class BasePipesPrefectClient(PipesClient, TreatAsResourceParam):
             state_type = state.type if state else None
             if state_type != last_reported_type:
                 context.log.info(
-                    f"[pipes] Prefect {prefect_run.kind} {prefect_run.id} is {state_type}"
+                    f"[pipes] Prefect {prefect_run.kind} {prefect_run.id} is "
+                    f"{_state_type_name(state)}"
                 )
                 last_reported_type = state_type
 
@@ -153,7 +164,7 @@ class BasePipesPrefectClient(PipesClient, TreatAsResourceParam):
                 if not is_successful_state(state):
                     raise DagsterPipesExecutionError(
                         f"Prefect {prefect_run.kind} {prefect_run.id} finished as "
-                        f"{state_type}: {_state_message(state)}"
+                        f"{_state_type_name(state)}: {_state_message(state)}"
                     )
                 return
 
@@ -256,9 +267,17 @@ class BasePipesPrefectClient(PipesClient, TreatAsResourceParam):
         }
 
 
+def _state_type_name(state: State | None) -> str:
+    # Not `{state.type}`: it is a str-mixin enum, which f-strings render as "StateType.CANCELLED"
+    # on Python 3.11+ but "CANCELLED" on 3.10.
+    if state is None or state.type is None:
+        return "an unknown state"
+    return state.type.value
+
+
 def _state_message(state: State | None) -> str:
     # Prefect leaves `message` empty on plenty of terminal states, so fall back to the name
     # rather than reporting a failure with nothing in it.
     if state is None:
         return "no state reported"
-    return state.message or state.name or str(state.type)
+    return state.message or state.name or "no details reported"

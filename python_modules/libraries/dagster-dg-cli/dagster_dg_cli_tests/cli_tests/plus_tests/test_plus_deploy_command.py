@@ -24,7 +24,6 @@ from dagster_test.dg_utils.utils import (
 from dagster_dg_cli_tests.cli_tests.plus_tests.utils import (
     PYTHON_VERSION,
     mock_hybrid_response,
-    mock_serverless_k8s_response,
     mock_serverless_response,
 )
 
@@ -296,37 +295,6 @@ def test_plus_deploy_command_agent_type_from_graphql(
         )
 
 
-def test_plus_deploy_serverless_k8s_redirects_pex_to_docker(
-    logged_in_dg_cli_config, project: Path, runner
-):
-    """Serverless v2 (K8s) does not run PEX: a --build-strategy=python-executable build is
-    transparently redirected to the PEX-bundle Docker strategy, with a warning.
-    """
-    with mock_external_dagster_cloud_cli_command() as mocked_cloud_cli_commands:
-        mock_serverless_k8s_response()
-
-        result = runner.invoke(
-            "plus",
-            "deploy",
-            "--yes",
-            "--agent-type",
-            "serverless",
-            "--build-strategy",
-            "python-executable",
-        )
-        assert result.exit_code == 0, result.output + " : " + str(result.exception)
-        assert "Fast deploys (PEX) are not supported on Serverless (Kubernetes)" in result.output
-        # The warning must flag the fallback as temporary and point at the migration lever.
-        assert "temporary and will be removed" in result.output
-        assert "ENABLE_FAST_DEPLOYS=false" in result.output
-
-        mocked_cloud_cli_commands.build.assert_called_once()
-        assert (
-            mocked_cloud_cli_commands.build.call_args.kwargs["build_strategy"]
-            == BuildStrategy.pex_docker
-        )
-
-
 def test_plus_deploy_command_serverless(logged_in_dg_cli_config, project: Path, runner):
     with (
         mock_external_dagster_cloud_cli_command() as mocked_cloud_cli_commands,
@@ -349,6 +317,7 @@ def test_plus_deploy_command_serverless(logged_in_dg_cli_config, project: Path, 
             location_name=[],
             snapshot_base_condition=None,
             status_url=None,
+            defs_base_path=None,
         )
         mocked_cloud_cli_commands.build.assert_called_once_with(
             statedir=DEFAULT_STATEDIR_PATH,
@@ -405,6 +374,7 @@ def test_plus_deploy_command_serverless_workspace(logged_in_dg_cli_config, works
             dagster_env=None,
             snapshot_base_condition=None,
             status_url=None,
+            defs_base_path=None,
         )
         mocked_cloud_cli_commands.build.assert_has_calls(
             [
@@ -505,6 +475,7 @@ def test_plus_deploy_command_valid_location(logged_in_dg_cli_config, workspace, 
             dagster_env=None,
             snapshot_base_condition=None,
             status_url=None,
+            defs_base_path=None,
         )
         mocked_cloud_cli_commands.build.assert_called_once_with(
             statedir=DEFAULT_STATEDIR_PATH,
@@ -592,6 +563,7 @@ def test_plus_deploy_on_branch_with_snapshot_base_condition(
             dagster_env=None,
             snapshot_base_condition=SnapshotBaseDeploymentCondition.ON_UPDATE,
             status_url="https://my-status-url.com",
+            defs_base_path=None,
         )
 
     # subcommand can also init in the same way
@@ -625,6 +597,7 @@ def test_plus_deploy_on_branch_with_snapshot_base_condition(
             dagster_env=None,
             snapshot_base_condition=SnapshotBaseDeploymentCondition.ON_UPDATE,
             status_url="https://my-status-url.com",
+            defs_base_path=None,
         )
 
 
@@ -691,6 +664,7 @@ def test_plus_deploy_hybrid_with_yaml_files(
                 location_name=[],
                 snapshot_base_condition=None,
                 status_url=None,
+                defs_base_path=None,
             )
             mocked_cloud_cli_commands.deploy.assert_called_once_with(
                 statedir=DEFAULT_STATEDIR_PATH,
@@ -752,6 +726,7 @@ def test_plus_deploy_hybrid_with_workspace_yaml_files(
                 location_name=[],
                 snapshot_base_condition=None,
                 status_url=None,
+                defs_base_path=None,
             )
 
             mocked_cloud_cli_commands.deploy.assert_called_once_with(
@@ -813,6 +788,7 @@ def test_plus_deploy_hybrid_with_merged_yaml_files(
                 location_name=[],
                 snapshot_base_condition=None,
                 status_url=None,
+                defs_base_path=None,
             )
 
             mocked_cloud_cli_commands.deploy.assert_called_once_with(
@@ -868,6 +844,7 @@ def test_plus_deploy_subcommands(
             location_name=[],
             snapshot_base_condition=None,
             status_url=None,
+            defs_base_path=None,
         )
 
         mocked_cloud_cli_commands.reset_mocks()
@@ -950,6 +927,7 @@ def test_plus_deploy_subcommands_with_location(
             location_name=["foo-bar"],
             snapshot_base_condition=None,
             status_url=None,
+            defs_base_path=None,
         )
 
         mocked_cloud_cli_commands.reset_mocks()
@@ -1059,6 +1037,7 @@ def test_plus_deploy_hybrid_with_build_yaml_scaffold(
                 location_name=[],
                 snapshot_base_condition=None,
                 status_url=None,
+                defs_base_path=None,
             )
             mocked_cloud_cli_commands.deploy.assert_called_once_with(
                 statedir=DEFAULT_STATEDIR_PATH,
@@ -1114,6 +1093,7 @@ def test_plus_deploy_hybrid_with_workspace_build_yaml_scaffold(
                 location_name=[],
                 snapshot_base_condition=None,
                 status_url=None,
+                defs_base_path=None,
             )
 
             mocked_cloud_cli_commands.deploy.assert_called_once_with(
